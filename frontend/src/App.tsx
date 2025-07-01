@@ -28,7 +28,7 @@ function App() {
   const [isRepeatActive, setIsRepeatActive] = useState(false);
   const [textIndex, setTextIndex] = useState(0);
 
-  const [user_id, setUserId] = useState<string | null>(cuid())
+  const user_id = cuid() // Convert to constant since we don't need to update it
   const [sessionToken, setSessionToken] = useState<string | null>(null)
   const [connectionId, setConnectionId] = useState<string | null>(null)
 
