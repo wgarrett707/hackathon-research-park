@@ -75,6 +75,46 @@ function App() {
     setIsRepeatActive(!isRepeatActive);
   };
 
+  const getCurrentLocation = (): Promise<{ latitude: number; longitude: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by this browser.'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          reject(error);
+        }
+      );
+    });
+  };
+
+  const handleSkipWithLocation = async (direction: 'next' | 'previous') => {
+    try {
+      const location = await getCurrentLocation();
+      console.log(`${direction} button clicked with coordinates:`, location);
+      
+      // TODO: Send coordinates to /get_songs_recs endpoint
+      // const response = await fetch('/get_songs_recs', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify(location)
+      // });
+      
+    } catch (error) {
+      console.error('Error getting location:', error);
+    }
+  };
+
   return (
       <div className="w-full h-full min-h-screen bg-black">
       <div className="wrapper">
@@ -158,7 +198,7 @@ function App() {
           {/* Animated Text - Hidden on mobile, shown on desktop */}
           <div className="hidden lg:flex flex-col items-start justify-center lg:w-1/2 lg:pr-8 lg:ml-8">
             <div className="text-white text-7xl font-bold text-left flex items-baseline">
-              <span className="mr-2">SpotOn </span>
+              <span className="mr-3">SpotOn </span>
               <span className="inline-block overflow-hidden h-20 flex items-center">
                 <div 
                   className="transition-transform duration-500 ease-in-out"
@@ -228,6 +268,7 @@ function App() {
                 }} />
               </button>
               <button
+                onClick={() => handleSkipWithLocation('previous')}
                 className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors"
                 style={{ backgroundColor: '#282828' }}
                 aria-label="Previous"
@@ -259,6 +300,7 @@ function App() {
                 )}
               </button>
               <button
+                onClick={() => handleSkipWithLocation('next')}
                 className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors"
                 style={{ backgroundColor: '#282828' }}
                 aria-label="Next"
