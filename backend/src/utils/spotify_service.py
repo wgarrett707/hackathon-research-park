@@ -41,10 +41,19 @@ class SpotifyService:
                 
                 if response.status_code == 200:
                     connection_data = response.json()
+                    print(f"🔍 Nango connection data: {connection_data}")
+                    
+                    # Check what scopes are available
+                    metadata = connection_data.get('metadata', {})
+                    scopes = metadata.get('scopes') or connection_data.get('scopes', [])
+                    print(f"🔑 Available scopes: {scopes}")
+                    
                     credentials = connection_data.get('credentials', {})
                     access_token = credentials.get('access_token')
                     
                     if access_token:
+                        # Print first few characters of token for debugging (don't log full token for security)
+                        print(f"🔑 Access token received: {access_token[:20]}...")
                         # Initialize Spotipy client with the access token
                         self.spotify = spotipy.Spotify(auth=access_token)
                         print("✅ Spotify API client initialized with Nango credentials")

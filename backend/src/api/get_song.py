@@ -18,8 +18,11 @@ class PlaybackRequest(BaseModel):
 async def get_player_status(x_connection_id: Optional[str] = Header(None)):
     """Get current Spotify player status"""
     
+    print(f"🔍 Player status request - Connection ID: {x_connection_id}")
+    
     # If no connection ID provided, return a "not authenticated" state
     if not x_connection_id:
+        print("❌ No connection ID provided")
         return {
             "is_playing": False,
             "current_song": None,
@@ -28,15 +31,24 @@ async def get_player_status(x_connection_id: Optional[str] = Header(None)):
         }
     
     # Set the connection if provided
-    spotify_service.set_connection(x_connection_id)
+    if x_connection_id:
+        print(f"🔗 Setting connection: {x_connection_id}")
+        spotify_service.set_connection(x_connection_id)
+        # Ensure the Spotify client is initialized
+        if not spotify_service.spotify:
+            print("🔄 Initializing Spotify client...")
+            await spotify_service._initialize_spotify_client()
     
     if not spotify_service.spotify:
+        print("❌ Spotify client still not available after initialization")
         return {
             "is_playing": False,
             "current_song": None,
             "current_time": 0,
             "message": "Spotify API not available. Please authenticate with Nango first."
         }
+    
+    print("✅ Spotify client is available, fetching playback state...")
     
     try:
         # Get current playback state from Spotify
