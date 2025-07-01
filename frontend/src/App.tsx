@@ -11,7 +11,7 @@ import cuid from 'cuid';
 
 import ExploreIcon from '@mui/icons-material/Explore';
 import RepeatIcon from '@mui/icons-material/Repeat';
-import { getPlayerStatus, playMusic, pauseMusic, nextTrack, previousTrack, seekToPosition } from './services/api';
+import { getPlayerStatus, playMusic, pauseMusic, nextTrack, previousTrack, seekToPosition, setConnectionId as setApiConnectionId } from './services/api';
 import type { PlayerState } from './services/api';
 
 function formatTime(seconds: number) {
@@ -37,7 +37,7 @@ function App() {
 
   const signInSpotify = async () => {
     try {
-      const sessionToken = await fetch(`http://localhost:8080/auth/nango-session-token?user_id=${user_id}`)
+      const sessionToken = await fetch(`http://127.0.0.1:8080/auth/nango-session-token?user_id=${user_id}`)
       const sessionTokenJson = await sessionToken.json()
       console.log(sessionTokenJson)
       setSessionToken(sessionTokenJson)
@@ -45,7 +45,10 @@ function App() {
       
       const res = await nango.auth("spotify")
       console.log(res)
-      setConnectionId(res.connectionId)
+      
+      // Set the connection ID in both local state and API service
+      setConnectionId(res.connectionId)  // Local state
+      setApiConnectionId(res.connectionId)  // API service
     } catch (err) {
       console.error("Error fetching session token")
       console.error(err)
@@ -55,8 +58,13 @@ function App() {
 
   const phrases = ["is here.", "is enabled.", "is on.", "is ready.", "is live."];
 
-  // Poll for player status updates every 2 seconds
+  // Poll for player status updates every 2 seconds - only when authenticated
   useEffect(() => {
+    // Only fetch player state if we have a connection ID (user is authenticated)
+    if (!connectionId) {
+      return;
+    }
+
     const fetchPlayerState = async () => {
       try {
         const state = await getPlayerStatus();
@@ -75,7 +83,7 @@ function App() {
     const interval = setInterval(fetchPlayerState, 2000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [connectionId]); // Depend on connectionId so it starts polling when user logs in
 
   // Animated text cycling effect
   useEffect(() => {
@@ -197,7 +205,42 @@ function App() {
     }
   };
 
-  // Show loading state if player state hasn't loaded yet
+  // Show authentication screen if not logged in
+  if (!connectionId) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
+        <div className="text-center">
+          <div className="text-2xl mb-4">🎵 SpotOn</div>
+          <div className="text-lg mb-2">Connect to Spotify</div>
+          <div className="text-gray-400 mb-6">Sign in with your Spotify account to control playback</div>
+          
+          <button 
+            onClick={signInSpotify}
+            className="px-6 py-3 bg-green-500 rounded-full text-black font-semibold hover:bg-green-400 transition-colors cursor-pointer"
+            style={{
+              backgroundColor: '#22c55e',
+              color: '#000000',
+              padding: '12px 24px',
+              borderRadius: '9999px',
+              border: 'none',
+              fontWeight: '600',
+              fontSize: '16px',
+              cursor: 'pointer',
+              display: 'inline-block'
+            }}
+          >
+            🎵 Sign in with Spotify
+          </button>
+          
+          {error && (
+            <div className="text-red-500 mt-4">{error}</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state if player state hasn't loaded yet (only after authentication)
   if (!playerState) {
     return (
       <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
@@ -221,8 +264,8 @@ function App() {
     );
   }
 
-  // Show message if no song is currently playing
-  if (!playerState.current_song) {
+  // Show message if no song is currently playing (only after authentication)
+  if (!playerState?.current_song) {
     return (
       <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
         <div className="text-center">

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@nangohq/frontend": "^0.62.0",
+    "cuid": "^3.0.0"
+  }
+}

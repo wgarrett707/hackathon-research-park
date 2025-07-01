@@ -1,45 +1,64 @@
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 import os
+import httpx
 from typing import Optional, Dict, Any
 
 class SpotifyService:
     def __init__(self):
-        """Initialize Spotify API client"""
-        # You'll need to set these environment variables or replace with your credentials
-        client_id = os.getenv('SPOTIFY_CLIENT_ID', 'your_client_id_here')
-        client_secret = os.getenv('SPOTIFY_CLIENT_SECRET', 'your_client_secret_here')
-        redirect_uri = os.getenv('SPOTIFY_REDIRECT_URI', 'http://127.0.0.1:8080/callback')
+        """Initialize Spotify API client with Nango integration"""
+        self.nango_secret_key = os.getenv('NANGO_SECRET_KEY')
+        self.spotify = None
+        self.connection_id = None
         
-        if client_id == 'your_client_id_here' or client_secret == 'your_client_secret_here':
-            print("⚠️  Warning: Using placeholder Spotify credentials. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables.")
-            self.spotify = None
-            self.spotify_oauth = None
-        else:
-            try:
-                # For playback control, we need OAuth with user permissions
-                scope = "user-read-playback-state,user-modify-playback-state,user-read-currently-playing"
-                self.spotify_oauth = SpotifyOAuth(
-                    client_id=client_id,
-                    client_secret=client_secret,
-                    redirect_uri=redirect_uri,
-                    scope=scope,
-                    show_dialog=True
+        if not self.nango_secret_key:
+            print("⚠️  Warning: NANGO_SECRET_KEY not set. Spotify functionality will be limited.")
+    
+    def set_connection(self, connection_id: str) -> bool:
+        """Set the Nango connection ID - actual initialization happens lazily"""
+        self.connection_id = connection_id
+        # Don't initialize immediately since this is a sync method
+        # Initialization will happen on first API call
+        return True
+    
+    async def _initialize_spotify_client(self) -> bool:
+        """Initialize Spotify client using Nango credentials"""
+        if not self.connection_id or not self.nango_secret_key:
+            return False
+            
+        try:
+            # Get connection credentials from Nango
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"https://api.nango.dev/connection/{self.connection_id}",
+                    headers={
+                        "Authorization": f"Bearer {self.nango_secret_key}",
+                        "Content-Type": "application/json"
+                    },
+                    params={
+                        "provider_config_key": "spotify"
+                    }
                 )
                 
-                # Try to get cached token or create OAuth client
-                token_info = self.spotify_oauth.get_cached_token()
-                if token_info:
-                    self.spotify = spotipy.Spotify(auth=token_info['access_token'])
-                    print("✅ Spotify API client initialized with OAuth")
-                else:
-                    print("⚠️  Spotify OAuth not authenticated. User needs to authorize.")
-                    self.spotify = None
+                if response.status_code == 200:
+                    connection_data = response.json()
+                    credentials = connection_data.get('credentials', {})
+                    access_token = credentials.get('access_token')
                     
-            except Exception as e:
-                print(f"❌ Failed to initialize Spotify API: {e}")
-                self.spotify = None
-                self.spotify_oauth = None
+                    if access_token:
+                        # Initialize Spotipy client with the access token
+                        self.spotify = spotipy.Spotify(auth=access_token)
+                        print("✅ Spotify API client initialized with Nango credentials")
+                        return True
+                    else:
+                        print("❌ No access token found in Nango connection")
+                        return False
+                else:
+                    print(f"❌ Failed to get Nango connection: {response.status_code}")
+                    return False
+                    
+        except Exception as e:
+            print(f"❌ Error initializing Spotify client with Nango: {e}")
+            return False
 
     def search_track(self, track_name: str, artist_name: str) -> Optional[Dict[str, Any]]:
         """Search for a track and return metadata including album cover"""
@@ -102,18 +121,50 @@ class SpotifyService:
             print(f"❌ Error getting track by ID: {e}")
             return None
 
-    def get_current_playback(self) -> Optional[Dict[str, Any]]:
+    async def get_current_playback(self) -> Optional[Dict[str, Any]]:
         """Get current playback state"""
         if not self.spotify:
+            print("❌ Spotify client not initialized")
             return None
             
         try:
-            return self.spotify.current_playback()
+            print("🔍 Fetching current playback state...")
+            playback = self.spotify.current_playback()
+            
+            if playback is None:
+                print("⚠️  No active playback session found")
+                return None
+            elif not playback:
+                print("⚠️  Empty playback response")
+                return None
+            else:
+                print(f"✅ Got playback state: playing={playback.get('is_playing')}, device={playback.get('device', {}).get('name', 'Unknown')}")
+                return playback
+                
         except Exception as e:
             print(f"❌ Error getting current playback: {e}")
+            print(f"❌ Error type: {type(e).__name__}")
+            print(f"❌ Error details: {str(e)}")
+            
+            # Try to refresh connection and retry once
+            print("🔄 Attempting to refresh Spotify connection...")
+            if await self._initialize_spotify_client():
+                try:
+                    print("🔄 Retrying playback request...")
+                    playback = self.spotify.current_playback()
+                    if playback:
+                        print("✅ Retry successful!")
+                        return playback
+                    else:
+                        print("⚠️  Retry returned empty playback")
+                        return None
+                except Exception as retry_e:
+                    print(f"❌ Retry failed: {retry_e}")
+            else:
+                print("❌ Failed to refresh Spotify connection")
             return None
 
-    def start_playback(self):
+    async def start_playback(self):
         """Start/resume playback"""
         if not self.spotify:
             raise Exception("Spotify API not available")
@@ -122,9 +173,17 @@ class SpotifyService:
             self.spotify.start_playback()
         except Exception as e:
             print(f"❌ Error starting playback: {e}")
-            raise
+            # Try to refresh connection and retry
+            if await self._initialize_spotify_client():
+                try:
+                    self.spotify.start_playback()
+                except Exception as retry_e:
+                    print(f"❌ Retry failed: {retry_e}")
+                    raise
+            else:
+                raise
 
-    def pause_playback(self):
+    async def pause_playback(self):
         """Pause playback"""
         if not self.spotify:
             raise Exception("Spotify API not available")
@@ -133,9 +192,17 @@ class SpotifyService:
             self.spotify.pause_playback()
         except Exception as e:
             print(f"❌ Error pausing playback: {e}")
-            raise
+            # Try to refresh connection and retry
+            if await self._initialize_spotify_client():
+                try:
+                    self.spotify.pause_playback()
+                except Exception as retry_e:
+                    print(f"❌ Retry failed: {retry_e}")
+                    raise
+            else:
+                raise
 
-    def next_track(self):
+    async def next_track(self):
         """Skip to next track"""
         if not self.spotify:
             raise Exception("Spotify API not available")
@@ -144,9 +211,17 @@ class SpotifyService:
             self.spotify.next_track()
         except Exception as e:
             print(f"❌ Error skipping to next track: {e}")
-            raise
+            # Try to refresh connection and retry
+            if await self._initialize_spotify_client():
+                try:
+                    self.spotify.next_track()
+                except Exception as retry_e:
+                    print(f"❌ Retry failed: {retry_e}")
+                    raise
+            else:
+                raise
 
-    def previous_track(self):
+    async def previous_track(self):
         """Skip to previous track"""
         if not self.spotify:
             raise Exception("Spotify API not available")
@@ -155,9 +230,17 @@ class SpotifyService:
             self.spotify.previous_track()
         except Exception as e:
             print(f"❌ Error skipping to previous track: {e}")
-            raise
+            # Try to refresh connection and retry
+            if await self._initialize_spotify_client():
+                try:
+                    self.spotify.previous_track()
+                except Exception as retry_e:
+                    print(f"❌ Retry failed: {retry_e}")
+                    raise
+            else:
+                raise
 
-    def seek_to_position(self, position_ms: int):
+    async def seek_to_position(self, position_ms: int):
         """Seek to specific position in current track"""
         if not self.spotify:
             raise Exception("Spotify API not available")
@@ -166,28 +249,15 @@ class SpotifyService:
             self.spotify.seek_track(position_ms)
         except Exception as e:
             print(f"❌ Error seeking to position: {e}")
-            raise
-
-    def get_auth_url(self) -> Optional[str]:
-        """Get Spotify authorization URL for user authentication"""
-        if not self.spotify_oauth:
-            return None
-        return self.spotify_oauth.get_authorize_url()
-
-    def get_access_token(self, code: str) -> bool:
-        """Exchange authorization code for access token"""
-        if not self.spotify_oauth:
-            return False
-            
-        try:
-            token_info = self.spotify_oauth.get_access_token(code)
-            if token_info:
-                self.spotify = spotipy.Spotify(auth=token_info['access_token'])
-                print("✅ Spotify OAuth completed successfully")
-                return True
-        except Exception as e:
-            print(f"❌ Error getting access token: {e}")
-        return False
+            # Try to refresh connection and retry
+            if await self._initialize_spotify_client():
+                try:
+                    self.spotify.seek_track(position_ms)
+                except Exception as retry_e:
+                    print(f"❌ Retry failed: {retry_e}")
+                    raise
+            else:
+                raise
 
     def is_available(self) -> bool:
         """Check if Spotify API is available"""

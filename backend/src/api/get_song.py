@@ -1,23 +1,46 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
 from src.utils.spotify_service import spotify_service
 
 router = APIRouter()
 
+@router.get("/health")
+def health_check():
+    """Health check endpoint to test connectivity"""
+    return {"status": "healthy", "message": "Backend is running"}
+
 class PlaybackRequest(BaseModel):
     action: str  # "play", "pause", "next", "previous"
     position: Optional[int] = None  # for seeking
 
 @router.get("/player/status")
-def get_player_status():
+async def get_player_status(x_connection_id: Optional[str] = Header(None)):
     """Get current Spotify player status"""
-    if not spotify_service.is_available():
-        raise HTTPException(status_code=503, detail="Spotify API not available. Check credentials.")
+    
+    # If no connection ID provided, return a "not authenticated" state
+    if not x_connection_id:
+        return {
+            "is_playing": False,
+            "current_song": None,
+            "current_time": 0,
+            "message": "No Nango connection ID provided. Please authenticate with Spotify first."
+        }
+    
+    # Set the connection if provided
+    spotify_service.set_connection(x_connection_id)
+    
+    if not spotify_service.spotify:
+        return {
+            "is_playing": False,
+            "current_song": None,
+            "current_time": 0,
+            "message": "Spotify API not available. Please authenticate with Nango first."
+        }
     
     try:
         # Get current playback state from Spotify
-        playback_state = spotify_service.get_current_playback()
+        playback_state = await spotify_service.get_current_playback()
         
         if not playback_state:
             return {
@@ -50,46 +73,56 @@ def get_player_status():
         raise HTTPException(status_code=500, detail=f"Failed to get Spotify status: {str(e)}")
 
 @router.post("/player/control")
-def control_player(request: PlaybackRequest):
+async def control_player(request: PlaybackRequest, x_connection_id: Optional[str] = Header(None)):
     """Control Spotify playback"""
-    if not spotify_service.is_available():
-        raise HTTPException(status_code=503, detail="Spotify API not available. Check credentials.")
+    
+    # Set the connection if provided
+    if x_connection_id:
+        spotify_service.set_connection(x_connection_id)
+    
+    if not spotify_service.spotify:
+        raise HTTPException(status_code=503, detail="Spotify API not available. Please authenticate with Nango first.")
     
     try:
         if request.action == "play":
-            spotify_service.start_playback()
+            await spotify_service.start_playback()
         elif request.action == "pause":
-            spotify_service.pause_playback()
+            await spotify_service.pause_playback()
         elif request.action == "next":
-            spotify_service.next_track()
+            await spotify_service.next_track()
         elif request.action == "previous":
-            spotify_service.previous_track()
+            await spotify_service.previous_track()
         elif request.action == "seek" and request.position is not None:
-            spotify_service.seek_to_position(request.position * 1000)  # Convert to milliseconds
+            await spotify_service.seek_to_position(request.position * 1000)  # Convert to milliseconds
         else:
             raise HTTPException(status_code=400, detail="Invalid action")
         
         # Return updated status
-        return get_player_status()
+        return await get_player_status(x_connection_id)
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to control Spotify: {str(e)}")
 
 @router.post("/get_song")
-def get_song():
+async def get_song(x_connection_id: Optional[str] = Header(None)):
     """Legacy endpoint - returns current song"""
-    status = get_player_status()
+    status = await get_player_status(x_connection_id)
     return status.get("current_song")
 
 @router.post("/refresh-spotify-metadata")
-def refresh_spotify_metadata():
+async def refresh_spotify_metadata(x_connection_id: Optional[str] = Header(None)):
     """Refresh song metadata from Spotify API"""
-    if not spotify_service.is_available():
-        raise HTTPException(status_code=503, detail="Spotify API not available. Check credentials.")
+    
+    # Set the connection if provided
+    if x_connection_id:
+        spotify_service.set_connection(x_connection_id)
+    
+    if not spotify_service.spotify:
+        raise HTTPException(status_code=503, detail="Spotify API not available. Please authenticate with Nango first.")
     
     try:
         # Just return current status since we're using live Spotify data
-        status = get_player_status()
+        status = await get_player_status(x_connection_id)
         return {
             "message": "Using live Spotify data",
             "spotify_available": True,
@@ -99,39 +132,89 @@ def refresh_spotify_metadata():
         raise HTTPException(status_code=500, detail=f"Failed to refresh Spotify metadata: {str(e)}")
 
 @router.get("/spotify-status")
-def get_spotify_status():
+async def get_spotify_status(x_connection_id: Optional[str] = Header(None)):
     """Check if Spotify API is available and configured"""
+    
+    # Set the connection if provided
+    if x_connection_id:
+        spotify_service.set_connection(x_connection_id)
+    
+    has_nango_key = spotify_service.nango_secret_key is not None
+    has_connection = spotify_service.connection_id is not None
+    has_spotify_client = spotify_service.spotify is not None
+    
     return {
-        "spotify_available": spotify_service.is_available(),
-        "message": "Spotify API is ready" if spotify_service.is_available() else "Spotify API not configured. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables."
+        "spotify_available": has_spotify_client,
+        "nango_configured": has_nango_key,
+        "connection_set": has_connection,
+        "message": (
+            "Spotify API is ready" if has_spotify_client 
+            else "Need Nango connection ID" if has_nango_key and not has_connection
+            else "Nango not configured. Set NANGO_SECRET_KEY environment variable."
+        )
     }
 
 @router.get("/spotify-auth")
 def spotify_auth():
-    """Get Spotify authorization URL"""
-    if not spotify_service.spotify_oauth:
-        raise HTTPException(status_code=503, detail="Spotify OAuth not configured")
-    
-    auth_url = spotify_service.get_auth_url()
-    if not auth_url:
-        raise HTTPException(status_code=500, detail="Failed to generate authorization URL")
-    
-    return {
-        "auth_url": auth_url,
-        "message": "Visit this URL to authorize the application"
-    }
+    """Deprecated: Use Nango for Spotify authentication"""
+    raise HTTPException(
+        status_code=410, 
+        detail="This endpoint is deprecated. Use Nango authentication instead. Get a session token from /auth/nango-session-token"
+    )
 
 @router.get("/callback")
 def spotify_callback(code: str):
-    """Handle Spotify OAuth callback"""
-    if not spotify_service.spotify_oauth:
-        raise HTTPException(status_code=503, detail="Spotify OAuth not configured")
+    """Deprecated: Use Nango for Spotify authentication"""
+    raise HTTPException(
+        status_code=410, 
+        detail="This endpoint is deprecated. Use Nango authentication instead."
+    )
+
+@router.get("/debug/spotify")
+async def debug_spotify(x_connection_id: Optional[str] = Header(None)):
+    """Debug endpoint to check Spotify connection and playback"""
     
-    success = spotify_service.get_access_token(code)
-    if success:
-        return {
-            "message": "Spotify authorization successful!",
-            "spotify_available": True
-        }
-    else:
-        raise HTTPException(status_code=400, detail="Failed to complete Spotify authorization")
+    debug_info = {
+        "connection_id_provided": x_connection_id is not None,
+        "connection_id": x_connection_id,
+        "nango_key_configured": spotify_service.nango_secret_key is not None,
+        "spotify_client_initialized": spotify_service.spotify is not None,
+    }
+    
+    if x_connection_id:
+        spotify_service.set_connection(x_connection_id)
+        
+        # Try to initialize if not already done
+        if not spotify_service.spotify:
+            await spotify_service._initialize_spotify_client()
+        
+        debug_info.update({
+            "spotify_client_after_init": spotify_service.spotify is not None,
+        })
+        
+        if spotify_service.spotify:
+            try:
+                # Try to get user info to test API access
+                user_info = spotify_service.spotify.current_user()
+                debug_info["user_info"] = {
+                    "id": user_info.get("id"),
+                    "display_name": user_info.get("display_name"),
+                    "country": user_info.get("country"),
+                    "product": user_info.get("product")  # This shows if user has Premium
+                }
+                
+                # Try to get current playback
+                playback = await spotify_service.get_current_playback()
+                debug_info["playback_response"] = playback is not None
+                if playback:
+                    debug_info["playback_details"] = {
+                        "is_playing": playback.get("is_playing"),
+                        "device_name": playback.get("device", {}).get("name"),
+                        "device_type": playback.get("device", {}).get("type"),
+                        "track_name": playback.get("item", {}).get("name") if playback.get("item") else None
+                    }
+                
+            except Exception as e:
+                debug_info["api_error"] = str(e)
+    
+    return debug_info

@@ -21,7 +21,17 @@ app.add_middleware(
 app.include_router(get_song_router)
 app.include_router(auth_router)
 
+@app.get("/health")
+def health_check():
+    """Simple health check endpoint"""
+    return {"status": "healthy", "message": "Backend is running"}
+
+@app.get("/")
+def root():
+    """Root endpoint"""
+    return {"message": "SpotOn Music Player API", "docs": "/docs"}
+
 # For development: run with 'python main.py'
 # For production: use 'uvicorn backend.src.main:app --reload'
 if __name__ == "__main__":
-    uvicorn.run("backend.src.main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8080, reload=True)
