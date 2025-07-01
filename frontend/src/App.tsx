@@ -386,7 +386,7 @@ function App() {
                 }} />
               </button>
               <button
-                onClick={() => handleSkipWithLocation('previous')}
+                // onClick={() => handleSkipWithLocation('previous')}
                 onClick={handlePrevious}
                 disabled={isLoading}
                 className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -423,7 +423,7 @@ function App() {
                 )}
               </button>
               <button
-                onClick={() => handleSkipWithLocation('next')}
+                // onClick={() => handleSkipWithLocation('next')}
                 onClick={handleNext}
                 disabled={isLoading}
                 className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
