@@ -1,3 +1,4 @@
 fastapi
 uvicorn
-spotipy 
+spotipy
+python-dotenv
