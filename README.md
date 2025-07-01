@@ -7,7 +7,7 @@
 1. **Install [Miniconda/Anaconda](https://docs.conda.io/en/latest/miniconda.html) if you don't have it already.**
 2. **Create and activate a new conda environment:**
    ```bash
-   conda create -n hackathon-rp python=3.10 -y
+   conda create -n hackathon-rp python=3.12 -y
    conda activate hackathon-rp
    ```
 3. **Install backend dependencies:**
