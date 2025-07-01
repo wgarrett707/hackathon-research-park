@@ -1,10 +1,14 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from src.api import get_song_router, auth_router
 
-app = FastAPI()
+app = FastAPI(title="Music Player API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

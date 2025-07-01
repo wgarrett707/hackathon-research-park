@@ -1,5 +1,17 @@
 @import 'tailwindcss';
 
+/* Mobile viewport fixes */
+html {
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
 @font-face {
   font-family: 'SpotifyMix';
   src: url('/fonts/SpotifyMix-Regular.ttf') format('truetype');
@@ -33,13 +45,12 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
   color: #fff;
   background-color: #000;
   padding: 0;
+  overflow-x: hidden;
 }
 
 h1 {
@@ -58,12 +69,16 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
-button:hover {
-  border-color: #646cff;
-}
+
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  outline: none;
+}
+
+/* Control button hover effects */
+.control-button:hover .MuiSvgIcon-root {
+  color: #1ed760 !important;
+  transition: color 0.2s ease;
 }
 
 /* Animated Gradient Background */
@@ -88,23 +103,23 @@ button:focus-visible {
 
 .gradient-1 {
   background: rgb(29, 114, 30);
-  width: 700px;
-  height: 700px;
+  width: 500px;
+  height: 500px;
   animation-duration: 11s;
   opacity: 0.6;
-  left: 60%;
-  top: 40%;
+  left: 75%;
+  top: 50%;
   z-index: -2;
   animation-name: animation-gradient-1;
 }
 
 .gradient-2 {
   background: rgb(62, 121, 62);
-  width: 600px;
-  height: 600px;
+  width: 450px;
+  height: 450px;
   animation-duration: 11s;
   opacity: 0.6;
-  left: 40%;
+  left: 65%;
   top: 60%;
   z-index: -1;
   animation-name: animation-gradient-2;
@@ -112,14 +127,29 @@ button:focus-visible {
 
 .gradient-3 {
   background: rgb(69, 232, 148);
-  width: 500px;
-  height: 500px;
+  width: 400px;
+  height: 400px;
   animation-duration: 11s;
   opacity: 0.6;
-  left: 50%;
-  top: 50%;
+  left: 70%;
+  top: 40%;
   z-index: -3;
   animation-name: animation-gradient-3;
+}
+
+/* Mobile gradient colors - lighter green */
+@media (max-width: 1023px) {
+  .gradient-1 {
+    background: rgb(40, 120, 40);
+  }
+  
+  .gradient-2 {
+    background: rgb(50, 100, 50);
+  }
+  
+  .gradient-3 {
+    background: rgb(45, 140, 45);
+  }
 }
 
 @keyframes animation-gradient-1 {
@@ -197,5 +227,23 @@ button:focus-visible {
   }
   button {
     background-color: #f9f9f9;
+  }
+}
+
+/* Scrolling Text Animation */
+.scrolling-text {
+  animation: scroll-left 30s linear infinite;
+  font-size: 1.2rem;
+  font-weight: bold;
+  letter-spacing: 0.2em;
+  display: inline-block;
+}
+
+@keyframes scroll-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
   }
 }
