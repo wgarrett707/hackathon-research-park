@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-router = APIRouter()
+router = APIRouter("/song")
 
 @router.post("/get_song")
 def get_song():

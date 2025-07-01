@@ -85,7 +85,7 @@ def get_genre_from_location_and_time(location_point: LocationPoint, time: dateti
         audio_features["tempo"] = 0.1
         
 
-
+    return audio_features
 
 
 
