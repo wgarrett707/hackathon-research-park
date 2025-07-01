@@ -80,4 +80,32 @@ def nango_webhook(webhook_data: NangoWebhook):
         print(f"Received non-creation webhook: {webhook_data}")
         return {"status": "received", "message": "Webhook received but not processed"}
 
+@router.post("/logout")
+async def logout(connection_id: str):
+    """
+    Revoke a Nango connection and sign out the user.
+    This will delete the connection and revoke access tokens.
+    """
+    try:
+        # Revoke the connection in Nango
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(
+                f"https://api.nango.dev/connection/{connection_id}",
+                headers={
+                    "Authorization": f"Bearer {os.getenv('NANGO_SECRET_KEY')}",
+                }
+            )
+        
+        if response.status_code == 204:
+            print(f"Successfully revoked connection: {connection_id}")
+            return {"status": "success", "message": "User logged out successfully"}
+        else:
+            print(f"Failed to revoke connection {connection_id}: {response.status_code} - {response.text}")
+            # Even if Nango deletion fails, we can still consider the user "logged out" locally
+            return {"status": "success", "message": "User logged out locally"}
+            
+    except Exception as e:
+        print(f"Error during logout for connection {connection_id}: {str(e)}")
+        return {"status": "error", "message": "Logout failed", "error": str(e)}
+
 

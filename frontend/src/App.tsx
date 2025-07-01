@@ -56,6 +56,34 @@ function App() {
     
   }
 
+  const handleLogout = async () => {
+    try {
+      // Call backend to revoke the Nango connection
+      if (connectionId) {
+        await fetch(`http://127.0.0.1:8080/auth/logout?connection_id=${connectionId}`, {
+          method: 'POST'
+        })
+      }
+      
+      // Clear local state
+      setConnectionId(null)
+      setApiConnectionId(null)
+      setSessionToken(null)
+      setPlayerState(null)
+      setError(null)
+      
+      console.log('User logged out successfully')
+    } catch (err) {
+      console.error('Error during logout:', err)
+      // Still clear local state even if backend call fails
+      setConnectionId(null)
+      setApiConnectionId(null)
+      setSessionToken(null)
+      setPlayerState(null)
+      setError(null)
+    }
+  }
+
   const phrases = ["is here.", "is enabled.", "is on.", "is ready.", "is live."];
 
   // Poll for player status updates every 2 seconds - only when authenticated
@@ -353,18 +381,17 @@ function App() {
               <NotificationsIcon sx={{ fontSize: { xs: 18, lg: 24 }, color: 'white' }} />
             </button>
             
+            {/* Logout Button */}
             <button
-              className="w-8 h-8 lg:w-12 lg:h-12 flex items-center justify-center text-black font-semibold text-sm lg:text-base"
+              onClick={handleLogout}
+              className="px-3 py-1 lg:px-4 lg:py-2 bg-red-600 hover:bg-red-500 transition-colors rounded-full text-white text-xs lg:text-sm font-medium"
               style={{ 
-                backgroundColor: 'rgb(25, 230, 140)',
-                borderRadius: '50%',
-                border: 'none',
-                padding: 0
+                backgroundColor: '#dc2626',
+                border: 'none'
               }}
-              aria-label="Profile"
-              onClick={async () => await signInSpotify()}
+              aria-label="Sign Out"
             >
-              W
+              Sign Out
             </button>
           </div>
         </div>
