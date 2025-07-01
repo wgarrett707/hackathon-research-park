@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import './index.css';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import PauseIcon from '@mui/icons-material/Pause';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
 import SkipPreviousIcon from '@mui/icons-material/SkipPrevious';
 import HomeIcon from '@mui/icons-material/Home';
@@ -9,13 +8,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import ExploreIcon from '@mui/icons-material/Explore';
 import RepeatIcon from '@mui/icons-material/Repeat';
-
-const mockTrack = {
-  title: 'Blinding Lights',
-  artist: 'The Weeknd',
-  albumCover: 'https://i.scdn.co/image/ab67616d0000b273e5bfa1a3c7c1b8b8e1e1e1e1',
-  duration: 210, // seconds
-};
+import { getPlayerStatus, playMusic, pauseMusic, nextTrack, previousTrack, seekToPosition } from './services/api';
+import type { PlayerState } from './services/api';
 
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -24,32 +18,38 @@ function formatTime(seconds: number) {
 }
 
 function App() {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [playerState, setPlayerState] = useState<PlayerState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [isExploreActive, setIsExploreActive] = useState(false);
   const [isRepeatActive, setIsRepeatActive] = useState(false);
   const [textIndex, setTextIndex] = useState(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const phrases = ["is here.", "is enabled.", "is on.", "is ready.", "is live."];
 
+  // Poll for player status updates every 2 seconds
   useEffect(() => {
-    if (isPlaying) {
-      intervalRef.current = setInterval(() => {
-        setCurrentTime((prev) => {
-          if (prev < mockTrack.duration) return prev + 1;
-          setIsPlaying(false);
-          return prev;
-        });
-      }, 1000);
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    const fetchPlayerState = async () => {
+      try {
+        const state = await getPlayerStatus();
+        setPlayerState(state);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch player state:', err);
+        setError('Failed to connect to backend. Make sure the backend server is running on port 8000.');
+      }
     };
-  }, [isPlaying]);
 
+    // Initial fetch
+    fetchPlayerState();
+
+    // Poll every 2 seconds
+    const interval = setInterval(fetchPlayerState, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Animated text cycling effect
   useEffect(() => {
     const textInterval = setInterval(() => {
       setTextIndex((prev) => (prev + 1) % phrases.length);
@@ -58,13 +58,67 @@ function App() {
     return () => clearInterval(textInterval);
   }, []);
 
-  const handlePlayPause = () => {
-    if (currentTime >= mockTrack.duration) setCurrentTime(0);
-    setIsPlaying((p) => !p);
+  const handlePlayPause = async () => {
+    try {
+      setIsLoading(true);
+      let newState;
+      if (playerState?.is_playing) {
+        newState = await pauseMusic();
+      } else {
+        newState = await playMusic();
+      }
+      setPlayerState(newState);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to control playback:', err);
+      setError('Failed to control playback');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCurrentTime(Number(e.target.value));
+  const handleNext = async () => {
+    try {
+      setIsLoading(true);
+      const newState = await nextTrack();
+      setPlayerState(newState);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to skip to next track:', err);
+      setError('Failed to skip track');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePrevious = async () => {
+    try {
+      setIsLoading(true);
+      const newState = await previousTrack();
+      setPlayerState(newState);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to skip to previous track:', err);
+      setError('Failed to skip track');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleScrub = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTime = Number(e.target.value);
+    
+    try {
+      setIsLoading(true);
+      const newState = await seekToPosition(newTime);
+      setPlayerState(newState);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to seek:', err);
+      setError('Failed to seek');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleExploreToggle = () => {
@@ -75,8 +129,57 @@ function App() {
     setIsRepeatActive(!isRepeatActive);
   };
 
+  // Show loading state if player state hasn't loaded yet
+  if (!playerState) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
+        {error ? (
+          <div className="text-center">
+            <div className="text-red-500 mb-4">{error}</div>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="px-4 py-2 bg-green-500 rounded text-black"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+            <div>Loading music player...</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Show message if no song is currently playing
+  if (!playerState.current_song) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
+        <div className="text-center">
+          <div className="text-2xl mb-4">🎵</div>
+          <div className="text-lg mb-2">No song is currently playing</div>
+          <div className="text-gray-400 mb-4">Start playing something on Spotify to control it here</div>
+          {error && (
+            <div className="text-red-500 mb-4">{error}</div>
+          )}
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-green-500 rounded text-black"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentTime = playerState.current_time || 0;
+  const duration = playerState.duration || 0;
+
   return (
-      <div className="w-full h-full min-h-screen bg-black">
+    <div className="w-full h-full min-h-screen bg-black">
       <div className="wrapper">
         <div className="gradient gradient-1"></div>
         <div className="gradient gradient-2"></div>
@@ -189,15 +292,28 @@ function App() {
           </div>
           
           <div className="w-full max-w-xs lg:max-w-sm rounded-xl shadow-2xl lg:shadow-lg bg-[#282828] p-4 lg:p-6 flex flex-col items-center">
+            {error && (
+              <div className="w-full mb-4 p-2 bg-red-900 text-red-200 rounded text-sm text-center">
+                {error}
+              </div>
+            )}
+            {isLoading && (
+              <div className="w-full mb-4 p-2 bg-blue-900 text-blue-200 rounded text-sm text-center flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-200 mr-2"></div>
+                Loading audio...
+              </div>
+            )}
             <img
-              src={mockTrack.albumCover}
+              src={playerState.current_song.album_cover}
               alt="Album Cover"
               className="w-32 h-32 lg:w-40 lg:h-40 rounded-lg mb-3 lg:mb-4 shadow-md object-cover"
             />
             <div className="text-white text-base lg:text-lg font-semibold text-center mb-1">
-              {mockTrack.title}
+              {playerState.current_song.title}
             </div>
-            <div className="text-gray-400 text-xs lg:text-sm text-center mb-3 lg:mb-4">{mockTrack.artist}</div>
+            <div className="text-gray-400 text-xs lg:text-sm text-center mb-3 lg:mb-4">
+              {playerState.current_song.artist}
+            </div>
             <div className="w-full flex items-center gap-2 mb-3 lg:mb-4">
               <span className="text-xs text-gray-400 w-8 text-right">
                 {formatTime(currentTime)}
@@ -205,19 +321,21 @@ function App() {
               <input
                 type="range"
                 min={0}
-                max={mockTrack.duration}
+                max={duration}
                 value={currentTime}
                 onChange={handleScrub}
                 className="flex-1 accent-green-500 h-1 rounded-lg"
+                disabled={isLoading}
               />
               <span className="text-xs text-gray-400 w-8 text-left">
-                {formatTime(mockTrack.duration)}
+                {formatTime(duration)}
               </span>
             </div>
             <div className="flex items-center justify-center gap-3 lg:gap-4 mb-3 lg:mb-4">
               <button
                 onClick={handleExploreToggle}
-                className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors"
+                disabled={isLoading}
+                className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: '#282828' }}
                 aria-label="Explore"
               >
@@ -228,7 +346,9 @@ function App() {
                 }} />
               </button>
               <button
-                className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors"
+                onClick={handlePrevious}
+                disabled={isLoading}
+                className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: '#282828' }}
                 aria-label="Previous"
               >
@@ -240,16 +360,19 @@ function App() {
               </button>
               <button
                 onClick={handlePlayPause}
-                className="w-14 h-14 lg:w-16 lg:h-16 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 transition-colors shadow-lg focus:outline-none"
+                disabled={isLoading}
+                className="w-14 h-14 lg:w-16 lg:h-16 flex items-center justify-center rounded-full bg-white hover:bg-gray-100 transition-colors shadow-lg focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ 
                   backgroundColor: 'white',
                   borderRadius: '50%',
                   border: 'none',
                   padding: 0
                 }}
-                aria-label={isPlaying ? 'Pause' : 'Play'}
+                aria-label={playerState.is_playing ? 'Pause' : 'Play'}
               >
-                {isPlaying ? (
+                {isLoading ? (
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+                ) : playerState.is_playing ? (
                   <svg width="28" height="28" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="lg:w-8 lg:h-8">
                     <rect x="10" y="8" width="6" height="24" rx="2" fill="#4B5563" />
                     <rect x="24" y="8" width="6" height="24" rx="2" fill="#4B5563" />
@@ -259,7 +382,9 @@ function App() {
                 )}
               </button>
               <button
-                className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors"
+                onClick={handleNext}
+                disabled={isLoading}
+                className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: '#282828' }}
                 aria-label="Next"
               >
@@ -271,7 +396,8 @@ function App() {
               </button>
               <button
                 onClick={handleRepeatToggle}
-                className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors"
+                disabled={isLoading}
+                className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: '#282828' }}
                 aria-label="Repeat"
               >
@@ -282,7 +408,11 @@ function App() {
                 }} />
               </button>
             </div>
-            <div className="mt-6 lg:mt-8 text-gray-500 text-xs text-center">SpotOn &mdash; Inspired by Spotify</div>
+            <div className="mt-6 lg:mt-8 text-gray-500 text-xs text-center">
+              SpotOn &mdash; Inspired by Spotify
+              {playerState.is_playing && <div className="mt-1 text-green-400">🎵 Playing on Spotify</div>}
+              {playerState.device && <div className="mt-1 text-blue-400">📱 {playerState.device}</div>}
+            </div>
           </div>
         </div>
       </div>
