@@ -44,11 +44,11 @@ class SpotifyService:
                     print(f"🔍 Nango connection data: {connection_data}")
                     
                     # Check what scopes are available
-                    metadata = connection_data.get('metadata', {})
-                    scopes = metadata.get('scopes') or connection_data.get('scopes', [])
+                    credentials = connection_data.get('credentials', {})
+                    raw_creds = credentials.get('raw', {})
+                    scopes = raw_creds.get('scope', '').split(' ') if raw_creds.get('scope') else []
                     print(f"🔑 Available scopes: {scopes}")
                     
-                    credentials = connection_data.get('credentials', {})
                     access_token = credentials.get('access_token')
                     
                     if access_token:
