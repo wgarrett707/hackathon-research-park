@@ -1,5 +1,17 @@
 @import 'tailwindcss';
 
+/* Mobile viewport fixes */
+html {
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
 @font-face {
   font-family: 'SpotifyMix';
   src: url('/fonts/SpotifyMix-Regular.ttf') format('truetype');
@@ -33,13 +45,12 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
   color: #fff;
   background-color: #000;
   padding: 0;
+  overflow-x: hidden;
 }
 
 h1 {
@@ -126,6 +137,21 @@ button:focus-visible {
   animation-name: animation-gradient-3;
 }
 
+/* Mobile gradient colors - lighter green */
+@media (max-width: 1023px) {
+  .gradient-1 {
+    background: rgb(40, 120, 40);
+  }
+  
+  .gradient-2 {
+    background: rgb(50, 100, 50);
+  }
+  
+  .gradient-3 {
+    background: rgb(45, 140, 45);
+  }
+}
+
 @keyframes animation-gradient-1 {
   0% {
     transform: translateY(-50%) translateX(-50%) rotate(-20deg) translateX(20%);
@@ -201,5 +227,23 @@ button:focus-visible {
   }
   button {
     background-color: #f9f9f9;
+  }
+}
+
+/* Scrolling Text Animation */
+.scrolling-text {
+  animation: scroll-left 30s linear infinite;
+  font-size: 1.2rem;
+  font-weight: bold;
+  letter-spacing: 0.2em;
+  display: inline-block;
+}
+
+@keyframes scroll-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
   }
 }
