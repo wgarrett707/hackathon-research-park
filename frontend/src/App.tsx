@@ -7,6 +7,9 @@ import SkipPreviousIcon from '@mui/icons-material/SkipPrevious';
 import HomeIcon from '@mui/icons-material/Home';
 import SearchIcon from '@mui/icons-material/Search';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import Nango from '@nangohq/frontend';
+import cuid from 'cuid';
+
 
 const mockTrack = {
   title: 'Blinding Lights',
@@ -24,7 +27,30 @@ function formatTime(seconds: number) {
 function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [user_id, setUserId] = useState<string | null>(cuid())
+  const [sessionToken, setSessionToken] = useState<string | null>(null)
+  const [connectionId, setConnectionId] = useState<string | null>(null)
+
+
+  const intervalRef = useRef<number | null>(null);
+
+  const signInSpotify = async () => {
+    try {
+      const sessionToken = await fetch(`http://localhost:8080/auth/nango-session-token?user_id=${user_id}`)
+      const sessionTokenJson = await sessionToken.json()
+      console.log(sessionTokenJson)
+      setSessionToken(sessionTokenJson)
+      const nango = new Nango({ connectSessionToken: sessionTokenJson})
+      
+      const res = await nango.auth("spotify")
+      console.log(res)
+      setConnectionId(res.connectionId)
+    } catch (err) {
+      console.error("Error fetching session token")
+      console.error(err)
+    }
+    
+  }
 
   useEffect(() => {
     if (isPlaying) {
@@ -125,6 +151,7 @@ function App() {
                 padding: 0
               }}
               aria-label="Profile"
+              onClick={async () => await signInSpotify()}
             >
               W
             </button>
