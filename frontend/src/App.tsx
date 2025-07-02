@@ -27,6 +27,7 @@ function App() {
   const [isExploreActive, setIsExploreActive] = useState(false);
   const [isRepeatActive, setIsRepeatActive] = useState(false);
   const [textIndex, setTextIndex] = useState(0);
+  const [pausePolling, setPausePolling] = useState(false);
 
   const user_id = cuid() // Convert to constant since we don't need to update it
   const [sessionToken, setSessionToken] = useState<string | null>(null)
@@ -89,7 +90,7 @@ function App() {
   // Poll for player status updates every 2 seconds - only when authenticated
   useEffect(() => {
     // Only fetch player state if we have a connection ID (user is authenticated)
-    if (!connectionId) {
+    if (!connectionId || pausePolling) {
       return;
     }
 
@@ -111,7 +112,7 @@ function App() {
     const interval = setInterval(fetchPlayerState, 2000);
 
     return () => clearInterval(interval);
-  }, [connectionId]); // Depend on connectionId so it starts polling when user logs in
+  }, [connectionId, pausePolling]); // Depend on connectionId and pausePolling
 
   // Animated text cycling effect
   useEffect(() => {
@@ -194,42 +195,124 @@ function App() {
   };
 
   const getCurrentLocation = (): Promise<{ latitude: number; longitude: number }> => {
+    console.log('🗺️ Getting current location...');
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
+        console.error('❌ Geolocation is not supported by this browser.');
         reject(new Error('Geolocation is not supported by this browser.'));
         return;
       }
 
+      console.log('🔍 Requesting geolocation permission...');
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          resolve({
+          const coords = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude
-          });
+          };
+          console.log('✅ Location obtained:', coords);
+          resolve(coords);
         },
         (error) => {
+          console.error('❌ Geolocation error:', error);
+          console.error('Error code:', error.code);
+          console.error('Error message:', error.message);
           reject(error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000 // Cache for 1 minute
         }
       );
     });
   };
 
   const handleSkipWithLocation = async (direction: 'next' | 'previous') => {
+    console.log(`🎵 handleSkipWithLocation called with direction: ${direction}`);
     try {
-      const location = await getCurrentLocation();
-      console.log(`${direction} button clicked with coordinates:`, location);
+      setIsLoading(true);
+      // Temporarily pause polling to avoid conflicts during location-based skips
+      setPausePolling(true);
+      console.log('⏸️ Polling paused for location-based skip');
       
-      // TODO: Send coordinates to /get_songs_recs endpoint
-      // const response = await fetch('/get_songs_recs', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify(location)
-      // });
+      // Always get fresh location for each request
+      console.log('🗺️ Getting fresh location...');
+      const location = await getCurrentLocation();
+      console.log(`✅ ${direction} button clicked with fresh coordinates:`, location);
+      
+      // Get new location-based recommendations for both directions
+      console.log('📡 Sending request to backend...');
+      const response = await fetch('http://127.0.0.1:8080/get_songs_recs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Connection-ID': connectionId || ''
+        },
+        body: JSON.stringify(location)
+      });
+      
+      console.log('📥 Backend response status:', response.status);
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✅ Location-based recommendations for ${direction}:`, result);
+        
+        // Update player state with the new song
+        if (result.current_song) {
+          console.log('🎵 Updating player state with new song:', result.current_song.title);
+          setPlayerState(result);
+        } else {
+          console.warn('⚠️ No current_song in backend response');
+        }
+        
+        // Wait a bit longer for the new song to start playing properly
+        // This prevents the UI from showing 0:00 while the track is loading
+        console.log('⏳ Waiting 3 seconds for track to start...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Force a fresh player state update after the delay
+        try {
+          console.log('🔄 Getting fresh player state after delay...');
+          const freshState = await getPlayerStatus();
+          console.log('✅ Fresh player state after location skip:', freshState);
+          setPlayerState(freshState);
+        } catch (err) {
+          console.warn('❌ Failed to get fresh player state after skip:', err);
+        }
+        
+        setError(null);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Failed to get location recommendations. Status:', response.status);
+        console.error('❌ Error response:', errorText);
+        setError('Failed to get location-based recommendations');
+        
+        // Fallback to regular skip if location-based fails
+        console.log('🔄 Falling back to regular skip...');
+        if (direction === 'next') {
+          await handleNext();
+        } else {
+          await handlePrevious();
+        }
+      }
       
     } catch (error) {
-      console.error('Error getting location:', error);
+      console.error('❌ Error in handleSkipWithLocation:', error);
+      setError('Failed to get your location or recommendations');
+      
+      // Fallback to regular skip if location fails
+      console.log('🔄 Falling back to regular skip due to error...');
+      if (direction === 'next') {
+        await handleNext();
+      } else {
+        await handlePrevious();
+      }
+    } finally {
+      setIsLoading(false);
+      // Resume polling after location-based skip is complete
+      setPausePolling(false);
+      console.log('▶️ Polling resumed after location-based skip');
     }
   };
 
@@ -485,8 +568,8 @@ function App() {
                 }} />
               </button>
               <button
-                // onClick={() => handleSkipWithLocation('previous')}
-                onClick={handlePrevious}
+                onClick={() => handleSkipWithLocation('previous')}
+                // onClick={handlePrevious}
                 disabled={isLoading}
                 className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: '#282828' }}
@@ -522,8 +605,8 @@ function App() {
                 )}
               </button>
               <button
-                // onClick={() => handleSkipWithLocation('next')}
-                onClick={handleNext}
+                onClick={() => handleSkipWithLocation('next')}
+                // onClick={handleNext}
                 disabled={isLoading}
                 className="control-button w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center bg-[#282828] !important border-none focus:outline-none hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: '#282828' }}
