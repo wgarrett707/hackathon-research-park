@@ -2,12 +2,22 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import random
+import asyncio
+import traceback
 from datetime import datetime
 from src.utils.spotify_service import spotify_service
 
+# Try to import aiohttp for Reccobeats API, fallback if not available
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    print("⚠️ aiohttp not available. Install with: pip install aiohttp")
+    AIOHTTP_AVAILABLE = False
+
 # Try to import the sophisticated location logic, fallback if it fails
 try:
-    from src.utils.spotify import get_genre_from_location_and_time, get_song_from_spotify
+    from src.utils.spotify import get_genre_from_location_and_time
     from src.models.models import LocationPoint
     SOPHISTICATED_LOCATION_AVAILABLE = True
     print("✅ Sophisticated location logic imported successfully")
@@ -286,7 +296,6 @@ async def get_songs_recs(location_data: LocationData, x_connection_id: Optional[
             }
         
         # Pick a random track instead of always the first one
-        import random
         selected_track = random.choice(recommended_tracks)
         print(f"🎯 Attempting to play: {selected_track['name']} by {selected_track['artist']}")
         print(f"🆔 Track Spotify ID: {selected_track['spotify_id']}")
@@ -299,7 +308,6 @@ async def get_songs_recs(location_data: LocationData, x_connection_id: Optional[
             print(f"✅ Started playing recommended track: {selected_track['name']} by {selected_track['artist']}")
             
             # Wait a bit for the track to start playing properly
-            import asyncio
             print("⏳ Waiting 2 seconds for track to load...")
             await asyncio.sleep(2)
             
@@ -340,7 +348,7 @@ async def generate_location_recommendations(location: LocationData) -> List[Dict
     
     if SOPHISTICATED_LOCATION_AVAILABLE:
         try:
-            print("🎯 Using sophisticated location logic...")
+            print("🎯 Using sophisticated location logic with Reccobeats API...")
             
             # Create LocationPoint object for your existing function
             location_point = LocationPoint(
@@ -356,11 +364,8 @@ async def generate_location_recommendations(location: LocationData) -> List[Dict
             
             print(f"🗺️ Location analysis: {location_analysis}")
             
-            # Get songs using Spotify's recommendation engine with your audio features
-            recommended_tracks = get_song_from_spotify(
-                location_analysis["audio_features"], 
-                spotify_service.spotify
-            )
+            # Get songs using Reccobeats API with your audio features
+            recommended_tracks = await get_tracks_from_reccobeats(location_analysis["audio_features"])
             
             # Add metadata about why this was recommended
             for track in recommended_tracks:
@@ -369,11 +374,11 @@ async def generate_location_recommendations(location: LocationData) -> List[Dict
                 track['time_of_day'] = location_analysis['time_of_day']
                 track['audio_features_used'] = location_analysis['audio_features']
             
-            print(f"✅ Found {len(recommended_tracks)} sophisticated recommendations")
+            print(f"✅ Found {len(recommended_tracks)} sophisticated recommendations from Reccobeats")
             if recommended_tracks:
                 return recommended_tracks
             else:
-                print("⚠️ No tracks from sophisticated method, falling back...")
+                print("⚠️ No tracks from Reccobeats, falling back...")
                 
         except Exception as e:
             print(f"❌ Error in sophisticated location recommendations: {e}")
@@ -503,3 +508,104 @@ async def generate_simple_location_recommendations(location: LocationData) -> Li
     
     print(f"✅ Simple recommendations found: {len(recommendations)} tracks")
     return recommendations[:12]  # Return up to 12 recommendations
+
+async def get_tracks_from_reccobeats(audio_features: dict) -> List[Dict[str, Any]]:
+    """Get track recommendations from Reccobeats API based on audio features"""
+    
+    if not AIOHTTP_AVAILABLE:
+        print("❌ aiohttp not available, cannot call Reccobeats API")
+        return []
+        
+    try:
+        print(f"🎵 Calling Reccobeats API with audio features: {audio_features}")
+        
+        # Prepare the query parameters for Reccobeats API
+        # Based on the API docs: size, seeds, negativeSeeds, and audio features
+        params = {
+            "size": 15,  # Total number of tracks to return (required)
+            "seeds": [],  # We'll use random popular track IDs as seeds (required)
+            "acousticness": audio_features.get("acousticness", 0.5),
+            "danceability": audio_features.get("danceability", 0.5),
+            "energy": audio_features.get("energy", 0.5),
+            "instrumentalness": audio_features.get("instrumentalness", 0.5),
+            "speechiness": audio_features.get("speechiness", 0.5),
+            "valence": audio_features.get("valence", 0.5),
+            # Note: API docs don't show tempo, so we'll skip it for now
+        }
+        
+        # We need seed tracks for the API - let's use some popular Spotify IDs as seeds
+        # These are just example seed tracks to make the API work
+        popular_seeds = [
+            "4iV5W9uYEdYUVa79Axb7Rh",  # Never Gonna Give You Up - Rick Astley
+            "60nZcImufyMA1MKQY3dcCH",  # Heat Waves - Glass Animals
+            "7qiZfU4dY1lWllzX7mPBI",   # Shape of You - Ed Sheeran
+            "2takcwOaAZWiXQijPHIx7B",  # Time - Pink Floyd
+            "5ChkMS8OtdzJeqyybCc9R5"   # Bohemian Rhapsody - Queen
+        ]
+        
+        # Use 1-3 random seeds (API requires 1-5 seeds)
+        import random
+        num_seeds = random.randint(1, 3)
+        params["seeds"] = random.sample(popular_seeds, num_seeds)
+        
+        print(f"📡 Sending GET request to Reccobeats with params: {params}")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://api.reccobeats.com/v1/track/recommendation",
+                params=params,
+                headers={"Content-Type": "application/json"}
+            ) as response:
+                
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Reccobeats API response received")
+                    print(f"📊 Response data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+                    
+                    tracks = []
+                    # The API might return tracks in different formats, let's handle multiple possibilities
+                    track_list = []
+                    if isinstance(data, list):
+                        track_list = data
+                    elif isinstance(data, dict):
+                        track_list = data.get('tracks', data.get('recommendations', data.get('data', [])))
+                    
+                    print(f"📊 Found {len(track_list)} tracks in response")
+                    
+                    for track_data in track_list:
+                        # Convert Reccobeats response to our format
+                        # Handle different possible field names
+                        track_info = {
+                            'spotify_id': track_data.get('spotify_id', track_data.get('id', track_data.get('track_id'))),
+                            'name': track_data.get('name', track_data.get('title', track_data.get('track_name', 'Unknown Track'))),
+                            'artist': track_data.get('artist', track_data.get('artist_name', track_data.get('artists', 'Unknown Artist'))),
+                            'album': track_data.get('album', track_data.get('album_name', 'Unknown Album')),
+                            'duration_ms': track_data.get('duration_ms', track_data.get('duration', 0)),
+                            'album_cover_url': track_data.get('album_cover_url', track_data.get('image_url', track_data.get('cover_url'))),
+                            'preview_url': track_data.get('preview_url'),
+                            'external_urls': track_data.get('external_urls', {}),
+                            'popularity': track_data.get('popularity', 50),
+                            'reccobeats_score': track_data.get('score', track_data.get('confidence', 0))
+                        }
+                        
+                        # Only add tracks that have a spotify_id
+                        if track_info['spotify_id']:
+                            tracks.append(track_info)
+                    
+                    print(f"✅ Successfully parsed {len(tracks)} tracks from Reccobeats")
+                    
+                    # Add some randomization
+                    random.shuffle(tracks)
+                    return tracks
+                
+                else:
+                    print(f"❌ Reccobeats API error: {response.status}")
+                    error_text = await response.text()
+                    print(f"❌ Error response: {error_text}")
+                    return []
+                    
+    except Exception as e:
+        print(f"❌ Error calling Reccobeats API: {e}")
+        import traceback
+        print(f"❌ Full traceback: {traceback.format_exc()}")
+        return []

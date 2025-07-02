@@ -5,16 +5,27 @@ from src.utils.spotify_auth import get_spotify_client
 def get_song_from_spotify(audio_features: dict, spotify_client):
     """Get song recommendations based on audio features"""
     try:
+        # Add some randomization to avoid getting the same songs every time
+        import random
+        
+        # Create slight variations in the audio features for variety
+        varied_features = {}
+        for key, value in audio_features.items():
+            if key == "tempo":
+                # Tempo is scaled differently, keep original logic
+                varied_features[f"target_{key}"] = value * 200
+            else:
+                # Add small random variation (±0.1) while keeping within bounds
+                variation = random.uniform(-0.1, 0.1)
+                varied_value = max(0.0, min(1.0, value + variation))
+                varied_features[f"target_{key}"] = varied_value
+        
+        print(f"🎵 Using varied audio features: {varied_features}")
+        
         # Get recommendations using Spotify's recommendation engine
         recommendations = spotify_client.recommendations(
-            limit=10,
-            target_acousticness=audio_features.get("acousticness", 0.5),
-            target_danceability=audio_features.get("danceability", 0.5),
-            target_energy=audio_features.get("energy", 0.5),
-            target_instrumentalness=audio_features.get("instrumentalness", 0.5),
-            target_speechiness=audio_features.get("speechiness", 0.5),
-            target_tempo=audio_features.get("tempo", 0.5) * 200,  # Scale tempo to BPM range
-            target_valence=audio_features.get("valence", 0.5)
+            limit=15,  # Get more recommendations for better variety
+            **varied_features
         )
         
         tracks = []
@@ -31,7 +42,9 @@ def get_song_from_spotify(audio_features: dict, spotify_client):
                 'popularity': track['popularity']
             }
             tracks.append(track_info)
-            
+        
+        # Shuffle the results to add more randomness
+        random.shuffle(tracks)
         return tracks
         
     except Exception as e:
@@ -74,57 +87,87 @@ def get_genre_from_location_and_time(location_point: LocationPoint, time: dateti
             "building_types": ["farmland", "parks"]
         }
     ]
+
+    # # TESTING - REMOVE THIS IN PRODUCTION
+    # location_point.latitude = 40.106549
+    # location_point.longitude = -88.23
+    # time_of_day = "night"
+    
     loc_type = None
     for chunk in chunks:
         if (location_point.latitude <= chunk["lat_max"] and location_point.latitude >= chunk["lat_min"] and 
             location_point.longitude <= chunk["lon_max"] and location_point.longitude >= chunk["lon_min"]):
             loc_type = chunk["type"]
             break
-
+    loc_type = "urban" 
+    print(f"🗺️ Detected location type: {loc_type} at {time_of_day} time")
+    
+    # Start with balanced audio features (0.5 = neutral)
     audio_features = {
-        "acousticness": 1,
-        "danceability": 1,
-        "energy": 1,
-        "tempo": 1,
-        "valence": 1,
-        "instrumentalness": 1,
-        "speechiness": 1
+        "acousticness": 0.5,
+        "danceability": 0.5,
+        "energy": 0.5,
+        "tempo": 0.5,
+        "valence": 0.5,
+        "instrumentalness": 0.3,  # Lower default - most songs have vocals
+        "speechiness": 0.1        # Lower default - most songs aren't very speech-heavy
     }
     
+    # Adjust audio features based on location and time
     if time_of_day == "night" and loc_type == "urban":
-        audio_features["energy"] = 0.8
-        audio_features["danceability"] = 0.9
-        audio_features["tempo"] = 0.6
+        # Night in the city - chill but sophisticated
+        audio_features["energy"] = 0.4          # Moderate energy
+        audio_features["danceability"] = 0.6    # Still danceable
+        audio_features["tempo"] = 0.4           # Slower tempo
+        audio_features["valence"] = 0.3         # Slightly melancholic
+        audio_features["instrumentalness"] = 0.2 # Some vocals
+        audio_features["speechiness"] = 0.1     # Not speech-heavy
+        audio_features["acousticness"] = 0.3    # Some acoustic elements
 
     elif time_of_day == "night" and loc_type == "suburban":
-        audio_features["valence"] = 0.4
-        audio_features["energy"] = 0.3
+        # Night in suburbs - relaxed and cozy
+        audio_features["valence"] = 0.5         # Neutral mood
+        audio_features["energy"] = 0.3          # Lower energy
+        audio_features["acousticness"] = 0.6    # More acoustic
+        audio_features["danceability"] = 0.4    # Less danceable
+        audio_features["tempo"] = 0.3           # Slower
 
     elif time_of_day == "night" and loc_type == "rural":
-        audio_features["energy"] = 0.2
-        audio_features["instrumentalness"] = 0.6   
+        # Night in countryside - peaceful and introspective
+        audio_features["energy"] = 0.3          # Low energy
+        audio_features["instrumentalness"] = 0.5 # More instrumental
+        audio_features["acousticness"] = 0.7    # Very acoustic
+        audio_features["valence"] = 0.4         # Contemplative
+        audio_features["tempo"] = 0.3           # Slow tempo
 
     elif time_of_day == "day" and loc_type == "urban":
-        audio_features["speechiness"] = 0.7
-        audio_features["tempo"] = 0.8
+        # Day in the city - energetic and upbeat
+        audio_features["speechiness"] = 0.2     # Some speech elements (but not too much)
+        audio_features["tempo"] = 0.7           # Faster tempo
+        audio_features["energy"] = 0.7          # High energy
+        audio_features["danceability"] = 0.7    # Very danceable
+        audio_features["valence"] = 0.7         # Happy/positive
 
     elif time_of_day == "day" and loc_type == "suburban":
-        audio_features["energy"] = 0.6
-        audio_features["speechiness"] = 0.6
+        # Day in suburbs - moderate energy, pleasant
+        audio_features["energy"] = 0.6          # Good energy
+        audio_features["speechiness"] = 0.1     # Minimal speech
+        audio_features["valence"] = 0.6         # Positive mood
+        audio_features["danceability"] = 0.6    # Moderately danceable
+        audio_features["tempo"] = 0.6           # Moderate tempo
         
     elif time_of_day == "day" and loc_type == "rural":
-        audio_features["energy"] = 0.7
-        audio_features["tempo"] = 0.1
+        # Day in countryside - folk and country vibes
+        audio_features["energy"] = 0.5          # Moderate energy
+        audio_features["tempo"] = 0.4           # Relaxed tempo
+        audio_features["acousticness"] = 0.8    # Very acoustic
+        audio_features["valence"] = 0.6         # Pleasant mood
+        audio_features["instrumentalness"] = 0.3 # Some instrumental tracks
+    
+    print(f"🎵 Audio features for {time_of_day} {loc_type}: {audio_features}")
     
     return {
         "location_type": loc_type,
         "time_of_day": time_of_day,
         "audio_features": audio_features
     }
-
-
-
-
-
-
-
