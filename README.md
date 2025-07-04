@@ -1,10 +1,8 @@
-# 🌍🎵 GeoBeats - Location & Time-Aware Music Discovery
+# 🌍🎵 SpotOn - Contextual Music Discovery
 
-**Winner Project at Research Park Hackathon 2024**
+An intelligent music player that recommends songs based on your real-time location and time of day. Using advanced machine learning algorithms and geospatial analysis, SpotOn creates the perfect soundtrack for wherever you are and whatever you're doing.
 
-An intelligent music player that recommends songs based on your real-time location and time of day. Using advanced machine learning algorithms and geospatial analysis, GeoBeats creates the perfect soundtrack for wherever you are and whatever you're doing.
-
-## 🚀 What Makes GeoBeats Special
+## 🚀 What Makes SpotOn Special
 
 ### 🧠 Intelligent Location-Based Recommendations
 - **Sophisticated Geospatial Analysis**: Uses coordinate chunking to determine if you're in urban, suburban, or rural areas
@@ -322,4 +320,4 @@ Enable detailed logging by checking the browser console and backend terminal out
 
 **🏆 Built with ❤️ at Research Park Hackathon 2025**
 
-*GeoBeats represents the future of context-aware music discovery, combining cutting-edge location intelligence with AI-powered recommendations to create the perfect soundtrack for your life.*
+*SpotOn represents the future of context-aware music discovery, combining cutting-edge location intelligence with AI-powered recommendations to create the perfect soundtrack for your life.*
