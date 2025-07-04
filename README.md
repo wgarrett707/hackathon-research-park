@@ -153,29 +153,6 @@ start-frontend.bat
    ```
    The app will be available at http://localhost:5173
 
-## 🏆 Hackathon Achievements
-
-### What We Built in 48 Hours
-- **Advanced Geospatial Music Engine**: Location-aware recommendation system
-- **ML-Powered Discovery**: Integration with Reccobeats API for audio feature-based recommendations  
-- **Real-Time Adaptation**: Fresh location tracking on every song skip
-- **Robust Fallback System**: Multiple layers ensuring music never stops playing
-- **Full Spotify Integration**: Premium account playback control via Web API
-- **Professional UI**: Spotify-inspired design with smooth animations
-
-### Technical Challenges Solved
-- **Complex Audio Feature Mapping**: Sophisticated algorithm to convert location/time into music characteristics
-- **Async API Integration**: Non-blocking requests to multiple external APIs
-- **Cross-Platform Compatibility**: Works seamlessly across devices and browsers
-- **Error Resilience**: Graceful degradation when services are unavailable
-- **Real-Time State Sync**: Player state updates across frontend and backend
-
-### Innovation Highlights
-- **Context-Aware AI**: First music app to use both geographic location AND time of day for ML recommendations
-- **Coordinate Chunking**: Novel approach to classify urban/suburban/rural environments from GPS data
-- **Multi-API Architecture**: Intelligent switching between Reccobeats AI and Spotify recommendations
-- **Location Privacy**: Processes coordinates locally without storing personal location data
-
 ## 🔗 API Integration & Testing
 
 The frontend communicates with the backend through these key endpoints:
